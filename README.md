@@ -14,6 +14,7 @@ cron_reg = t2c.Text2Cron('今天下午两点钟').cron()
 # use openai api key
 cron_gpt = t2c.Text2Cron('今天下午两点钟').gpt()
 # print the cron expressions
-print(cron_reg) # output: [4, 47, 14, 15, 5, '?', 2023]
+# current time: 2023/5/15 00:25
+print(cron_reg) # output: 0 14 15 5 ?
 print(cron_gpt) # output: 0 14 * * *
 ```

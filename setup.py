@@ -7,7 +7,7 @@ with open('README.md', 'r') as fh:
 
 setup(
     name='t2c',
-    version='0.0.3',
+    version='0.0.4',
     description='A Python Library that converts human readable text to Cron Expression.',
     long_description=long_description,
     url='https://github.com/iguangyu/text2cron',

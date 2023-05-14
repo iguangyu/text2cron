@@ -4,48 +4,53 @@ import requests
 import pendulum
 import cn2an
 
-re_dict = {
-    "日": "天",
-    "星期": "周",
-    "礼拜": "周",
-    "小时": "时",
-    "钟头": "时",
-    "点钟": "时",
-    "点": "时",
-    "小时": "时",
-    "分钟": "分",
-    "个半": ".5",
-    "天半": ".5天",
-    "半时":"30分",
-    "半个时":"30分",
-    "半个小时":"30分",
-    "半":"30分",
-    "一刻": "15分",
-    "minute": "分",
-}
 class Text2Cron(object):
-    
-    period = r'(每个?|下个?|这个?)?'
-    day = r'(今.|明[天]?|后[天]?|周[天1234567]?|[天周月年])?'
+    now = pendulum.now()
+    current_datetime = f"{now.hour}时{now.minute}分"
+    re_dict = {
+        ' ': '',
+        '号': '日',
+        "日": "天",
+        "星期": "周",
+        "礼拜": "周",
+        "小时": "时",
+        "钟头": "时",
+        "点钟": "时",
+        "点": "时",
+        "小时": "时",
+        "分钟": "分",
+        "个半": ".5",
+        "天半": ".5天",
+        "半时":"30分",
+        "半个时":"30分",
+        "半个小时":"30分",
+        "半":"30分",
+        "一刻": "15分",
+        "minute": "分",
+        "这时候": current_datetime,
+        "这个时候": current_datetime
+    }
+    period = r'(每个?|下[^午]|这个?)?'
+    day = r'(今.|明[天]?|后[天]?|周[天1234567]?|月\d+天|[天周月年])?'
     aopm = r'(早.|上.|中.|下.|晚.)?'
     hour = r'(\d+)?' + r'[点时：:]?'
     minute = r'([0-5]?[0-9]|半|一刻)?'
     
     full_pattern = period + day + aopm + hour + minute 
     short_term = r'(\d+\.?5?)?个?([分时天周月年])之?后'
+    day_pattern = r'周(\d|天)|月(\d+)天|(今.)|(明.)|(大*后.)'
     
-    def __init__(self, text: str, usegpt = False, apikey = '') -> None:
-        self.now = pendulum.now()
+    
+    def __init__(self, text: str, usegpt = False) -> None:
         self.text = text
-        if usegpt:
-            self.apikey = apikey
-        else:
+        # print(self.full_pattern)
+        if not usegpt:
             text = text.replace('\n','')
-            for key, value in re_dict.items():
+            for key, value in self.re_dict.items():
                 text = text.replace(key, value)
             self.text = cn2an.transform(text)
         
-    def __to_cron(self) -> None:
+    def __to_cron(self) -> list:
         l, isshort = self.__find_util(self.text)
         if isshort:
             digit = float(l[0])
@@ -58,28 +63,60 @@ class Text2Cron(object):
                 '分': self.now.add(minutes=digit)
             }
             self.now = offset[l[1]]
+            return [
+                0, self.now.minute, self.now.hour, 
+                self.now.day, self.now.month, '?', self.now.year,
+            ]
         else:
             period, day, aopm, hour, minute = l
+            everyday = False
+            # period_matches = re.search(self.period_pattern, period)
+            day_matches = re.search(self.day_pattern, day)
+            if day_matches is not None:
+                matches = day_matches.groups()
+                date_day, offset_days = matches[0:2], matches[2::]
+                if date_day != (None, None):
+                    self.now = self.now.replace(day=int(date_day[1])) \
+                        if date_day[0] is None else self.now.next(
+                            int(date_day[0]) if date_day[0] != '天' else 0)
+                else:
+                    a,b,c = offset_days
+                    self.now = self.now.add(
+                        days=0 if a is not None else 1 \
+                            if b is not None else c.count('大') + 2 \
+                                if c is not None else 0)
             if period != '':
-                pass
-            if day != '':
-                self.now = self.now.add(days=1) # TODO
+                if '每' in period:
+                    if '天' in day:
+                        everyday = True
+                    # TODO
             if hour != '' and 0<= int(hour) < 24:
-                if aopm != '' and '晚' in aopm or '下' in aopm:
-                    self.now = self.now.replace(hour=(int(hour) % 12 + 12))
+                hour = int(hour)
+                if '晚' in aopm or '下' in aopm and hour <= 12:
+                    if hour == 12:
+                        self.now = self.now.replace(hour=0)
+                        self.now.add(days=1)
+                    else:
+                        self.now = self.now.replace(hour=(12 + hour % 12))
                 else:
                     self.now = self.now.replace(hour=int(hour))
-            
             self.now = self.now.replace(minute=int(minute) if minute != '' else 0)
             self.now = self.now.replace(second=0)
-        return self.cron
+            return [
+                self.now.minute, self.now.hour, 
+                self.now.day if not everyday else '*', 
+                self.now.month if not everyday else '*',
+                '?',
+            ]
 
-    def cron(self) -> list:
-        self.__to_cron()
-        return [
-            self.now.second, self.now.minute, self.now.hour, 
-            self.now.day, self.now.month, '?', self.now.year,
-        ]
+    def show_args(self):
+        l, _ = self.__find_util(self.text)
+        return l
+
+    def cron(self) -> str:
+        cron_list = self.__to_cron()
+        return ' '.join([str(i) for i in cron_list])
+    
     
     def __find_util(self, text: str) -> list[tuple, bool]:
         long_term = max(re.findall(pattern=self.full_pattern, string=text),
@@ -92,12 +129,10 @@ class Text2Cron(object):
             key=lambda tup: sum(1 for val in tup if val != ''))
         return term, term == short_term
 
-    def gpt(self) -> str:
-        if self.apikey == '':
-            raise "api key is required"
+    def gpt(self, apikey: str) -> str:        
         try:
             import openai
-            openai.api_key = self.apikey
+            openai.api_key = apikey
             res = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{
@@ -127,6 +162,7 @@ if __name__ == '__main__':
         res = Text2Cron(text, usegpt=True, apikey='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').gpt()
     else: 
         res = Text2Cron(text).cron()
+        print(res)
 
     if args.cron is not None:
         print('= cron表达式如下 =')
