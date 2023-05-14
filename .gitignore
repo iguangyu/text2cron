@@ -26,6 +26,7 @@ MANIFEST
 *.manifest
 *.spec
 
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -54,9 +55,8 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
-# Flask stuff:
-instance/
-.webassets-cache
+# twine upload shell
+upload.sh
 
 # Scrapy stuff:
 .scrapy

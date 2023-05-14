@@ -3,10 +3,10 @@
 
 ### Installation
 ``` bash
-pip install --upgrade openai
+pip install t2c
 ```
 
-### useage
+### usage
 ``` python
 import t2c
 # normal

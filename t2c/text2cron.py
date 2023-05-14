@@ -44,11 +44,9 @@ class Text2Cron(object):
             for key, value in re_dict.items():
                 text = text.replace(key, value)
             self.text = cn2an.transform(text)
-            print("transform之后: "+self.text)
         
     def __to_cron(self) -> None:
         l, isshort = self.__find_util(self.text)
-        print(l)
         if isshort:
             digit = float(l[0])
             offset = {
@@ -62,26 +60,22 @@ class Text2Cron(object):
             self.now = offset[l[1]]
         else:
             period, day, aopm, hour, minute = l
-            print(period, day, aopm, hour, minute)
-            if hour != '':
+            if period != '':
+                pass
+            if day != '':
+                self.now = self.now.add(days=1) # TODO
+            if hour != '' and 0<= int(hour) < 24:
                 if aopm != '' and '晚' in aopm or '下' in aopm:
                     self.now = self.now.replace(hour=(int(hour) % 12 + 12))
                 else:
                     self.now = self.now.replace(hour=int(hour))
-            if minute != '':
-                self.now = self.now.replace(minute=int(minute))
-            if day != '':
-                self.now = self.now.add(days=1) # TODO
-            if period != '':
-                pass
             
-        print(self.now.to_datetime_string())
-        print(self.now.diff_for_humans())
+            self.now = self.now.replace(minute=int(minute) if minute != '' else 0)
+            self.now = self.now.replace(second=0)
         return self.cron
 
     def cron(self) -> list:
         self.__to_cron()
-        print(self.now.to_datetime_string())
         return [
             self.now.second, self.now.minute, self.now.hour, 
             self.now.day, self.now.month, '?', self.now.year,
@@ -133,7 +127,6 @@ if __name__ == '__main__':
         res = Text2Cron(text, usegpt=True, apikey='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').gpt()
     else: 
         res = Text2Cron(text).cron()
-    print(res)        
 
     if args.cron is not None:
         print('= cron表达式如下 =')
