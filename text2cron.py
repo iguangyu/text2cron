@@ -5,6 +5,8 @@ import pendulum
 import cn2an
 
 class Text2Cron(object):
+    now = pendulum.now()
+    current_datetime = f"{now.hour}时{now.minute}分"
     re_dict = {
         ' ': '',
         '号': '日',
@@ -25,6 +27,8 @@ class Text2Cron(object):
         "半":"30分",
         "一刻": "15分",
         "minute": "分",
+        "这时候": current_datetime,
+        "这个时候": current_datetime
     }
     period = r'(每个?|下[^午]|这个?)?'
     day = r'(今.|明[天]?|后[天]?|周[天1234567]?|月\d+天|[天周月年])?'
@@ -37,32 +41,17 @@ class Text2Cron(object):
     day_pattern = r'周(\d|天)|月(\d+)天|(今.)|(明.)|(大*后.)'
     
     
-    def __init__(self, usegpt=False, apikey='', language=None) -> None:
-        self.usegpt = usegpt
-        self.apikey = apikey
-        self.language = language
-
-                
-    def __to_text(self, text: str):
-        self.now = pendulum.now()
-        current_datetime = f"{self.now.hour}时{self.now.minute}分"
-        self.re_dict["这时候"] = current_datetime
-        self.re_dict["这个时候"] = current_datetime
-        text = text.replace('\n','')
-        for key, value in self.re_dict.items():
-            text = text.replace(key, value)
-        text = cn2an.transform(text)
-        return text
-    
-    def __to_cron(self, text: str) -> list:
-        if self.language is not None:
-            import googletrans
-            from googletrans import Translator
-            self.translater = Translator()
-            out = self.translater.translate(text, dest='zh-cn', src=self.language)
-            text = out.text
-        text = self.__to_text(text)
-        l, isshort = self.__find_util(text)
+    def __init__(self, text: str, usegpt = False) -> None:
+        self.text = text
+        # print(self.full_pattern)
+        if not usegpt:
+            text = text.replace('\n','')
+            for key, value in self.re_dict.items():
+                text = text.replace(key, value)
+            self.text = cn2an.transform(text)
+        
+    def __to_cron(self) -> list:
+        l, isshort = self.__find_util(self.text)
         if isshort:
             digit = float(l[0])
             offset = {
@@ -75,8 +64,8 @@ class Text2Cron(object):
             }
             self.now = offset[l[1]]
             return [
-                self.now.minute, self.now.hour, 
-                self.now.day, self.now.month, '?',
+                0, self.now.minute, self.now.hour, 
+                self.now.day, self.now.month, '?', self.now.year,
             ]
         else:
             period, day, aopm, hour, minute = l
@@ -120,14 +109,12 @@ class Text2Cron(object):
                 '?',
             ]
 
-    def show_args(self, text: str):
-        text = self.__to_text(text)
-        l, _ = self.__find_util(text)
+    def show_args(self):
+        l, _ = self.__find_util(self.text)
         return l
 
-    def cron(self, text: str) -> str:
-        
-        cron_list = self.__to_cron(text)
+    def cron(self) -> str:
+        cron_list = self.__to_cron()
         return ' '.join([str(i) for i in cron_list])
     
     
@@ -142,13 +129,10 @@ class Text2Cron(object):
             key=lambda tup: sum(1 for val in tup if val != ''))
         return term, term == short_term
 
-    def gpt(self, text: str) -> str:
-        if not self.usegpt or self.apikey == '':
-            raise ValueError('set the `usegpt` = True and set the correct apikey')    
+    def gpt(self, apikey: str) -> str:        
         try:
             import openai
-            openai.api_key = self.apikey
-            self.now = pendulum.now()
+            openai.api_key = apikey
             res = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{
@@ -156,7 +140,7 @@ class Text2Cron(object):
                     "content": "You are a helpful webapp that provides users with cron expressions"
                 },{
                     "role": "user",
-                    "content": f"Write a cron expression for the following and please just output the answer, say nothing else and don't explain 'current time is {self.now.to_datetime_string} {text}'"
+                    "content": f"Write a cron expression for the following and please just output the answer, say nothing else and don't explain 'current time is {self.now.to_datetime_string} {self.text}'"
                 }]
             )
             return res.choices[0].message.content
@@ -177,9 +161,7 @@ if __name__ == '__main__':
     if args.gpt is not None:
         res = Text2Cron(text, usegpt=True, apikey='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').gpt()
     else: 
-        print(text)
-        # res = Text2Cron(language='en').cron(text)
-        res = Text2Cron(language='en').cron('two minutes later')
+        res = Text2Cron(text).cron()
         print(res)
 
     if args.cron is not None:
@@ -189,6 +171,6 @@ if __name__ == '__main__':
         print('\n'.join(json.loads(res.text)['datas']))
 
     # import pendulum
-    # now = pendulum.now()
-    # now.add()
+    now = pendulum.now()
+    now.add()
 
